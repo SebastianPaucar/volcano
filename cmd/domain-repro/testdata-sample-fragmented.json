@@ -1,0 +1,132 @@
+[
+  {
+    "id": "node0-domain0-dev0",
+    "index": 0,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 0
+    }
+  },
+  {
+    "id": "node0-domain0-dev1",
+    "index": 1,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 0
+    }
+  },
+  {
+    "id": "node0-domain0-dev2",
+    "index": 2,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 0
+    }
+  },
+  {
+    "id": "node0-domain0-dev3",
+    "index": 3,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 0
+    }
+  },
+  {
+    "id": "node0-domain0-dev4",
+    "index": 4,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 0
+    }
+  },
+  {
+    "id": "node0-domain1-dev0",
+    "index": 0,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 1
+    }
+  },
+  {
+    "id": "node0-domain1-dev1",
+    "index": 1,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 1
+    }
+  },
+  {
+    "id": "node0-domain1-dev2",
+    "index": 2,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 1
+    }
+  },
+  {
+    "id": "node0-domain1-dev3",
+    "index": 3,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 1
+    }
+  },
+  {
+    "id": "node0-domain1-dev4",
+    "index": 4,
+    "count": 1,
+    "devmem": 32768,
+    "devcore": 100,
+    "type": "Ascend910",
+    "health": true,
+    "devicevendor": "Huawei",
+    "custominfo": {
+      "NetworkID": 1
+    }
+  }
+]
