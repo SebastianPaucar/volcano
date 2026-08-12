@@ -1,4 +1,4 @@
-# domain-repro: aggregate-vs-domain check divergence (illustration for #5751 Case 1)
+# domain-repro: aggregate-vs-domain check divergence (illustration for [#5751](https://github.com/volcano-sh/volcano/issues/5751) Case 1)
 
 ## What this is
 

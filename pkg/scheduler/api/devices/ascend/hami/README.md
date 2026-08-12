@@ -1,4 +1,4 @@
-# Case 1 (#5751) investigation: selectDevices domain-spanning behavior
+# Case 1 ([#5751](https://github.com/volcano-sh/volcano/issues/5751)) investigation: selectDevices domain-spanning behavior
 
 ## What was tested
 
