@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v2"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
@@ -1031,4 +1032,88 @@ func TestCalScore(t *testing.T) {
 			}
 		})
 	}
+}
+
+
+// --- Added for volcano-sh/volcano#5751 Case 1 investigation ---
+//
+// This test calls the REAL, unexported selectDevices method -- the same
+// method Allocate, FilterNode, and ScoreNode all call in production -- with
+// a fabricated but realistic device set (10 Ascend910 devices split 5/5
+// across two NetworkID domains) and a real pod requesting 8 devices.
+//
+// It does not use a threshold comparison. It inspects the actual devices
+// selectDevices returns and asserts on their NetworkID values, so a pass
+// means the allocation itself spans two physical domains -- not just that
+// two summary numbers disagree.
+
+func TestSelectDevices_Case1_FragmentedAcrossDomains(t *testing.T) {
+	// 10 devices: 5 with NetworkID 0, 5 with NetworkID 1.
+	devMap := make(map[string]*AscendDevice)
+	for domain := 0; domain < 2; domain++ {
+		for i := 0; i < 5; i++ {
+			id := fmt.Sprintf("dev-d%d-%d", domain, i)
+			dev := createTestAscendDevice(id, 100, 32000, 0, 0, 0, nil)
+			dev.DeviceInfo.CustomInfo = map[string]any{"NetworkID": float64(domain)}
+			devMap[id] = dev
+		}
+	}
+	ads := createTestAscendDevices("node1", "Ascend910", devMap)
+
+	// Pod requests 8 devices of type huawei.com/Ascend910 -- matching
+	// dev.config.ResourceName set by createTestAscendDevice, which
+	// ExtractResourceRequest reads via container.Resources.Limits.
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gang-pod",
+			Namespace: "ns1",
+			UID:       getTestUID("gang-pod"),
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name: "trainer",
+					Resources: v1.ResourceRequirements{
+						Limits: v1.ResourceList{
+							v1.ResourceName("huawei.com/Ascend910"): resource.MustParse("8"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	podDevs, err := ads.selectDevices(pod, binpackPolicy)
+	assert.NoError(t, err, "selectDevices should succeed: 10 healthy devices exist for an 8-device request")
+	assert.Len(t, podDevs, 1, "expected a single container's device list")
+
+	selected := podDevs[0]
+	assert.Len(t, selected, 8, "expected exactly 8 devices selected")
+
+	domainsUsed := map[string]int{}
+	for _, cd := range selected {
+		dev, ok := ads.Devices[cd.UUID]
+		if !ok {
+			t.Fatalf("selected device %s not found in AscendDevices.Devices", cd.UUID)
+		}
+		netID, ok := dev.DeviceInfo.CustomInfo["NetworkID"]
+		if !ok {
+			t.Fatalf("selected device %s has no NetworkID in CustomInfo", cd.UUID)
+		}
+		domainsUsed[fmt.Sprintf("%v", netID)]++
+	}
+
+	t.Logf("selectDevices returned devices from %d distinct NetworkID domain(s): %v", len(domainsUsed), domainsUsed)
+
+	// This is the actual claim: selectDevices, unmodified, given a request
+	// that no single domain can satisfy alone (5 < 8) but the node's total
+	// can (10 >= 8), returns devices spanning BOTH domains. That is a
+	// real cross-domain gang placement produced by the real allocation
+	// path -- not a simulated or threshold-based comparison.
+	assert.Equal(t, 2, len(domainsUsed),
+		"selectDevices split an 8-device request across 2 NetworkID domains "+
+			"(5 available in each) instead of failing or restricting to one "+
+			"domain -- this is the Case 1 gap in volcano-sh/volcano#5751, "+
+			"reproduced against the real allocation path in "+
+			"pkg/scheduler/api/devices/ascend/hami")
 }
