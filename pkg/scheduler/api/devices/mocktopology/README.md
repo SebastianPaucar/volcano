@@ -1,4 +1,4 @@
-# Case 2 PoC — fragmented device domains are invisible until after Node/HyperNode commit
+# PoC — fragmented device domains are invisible until after Node/HyperNode commit
 
 **Status: working, verified against real scheduler code, 8/8 runs consistent with the finding.**
 
@@ -20,7 +20,122 @@ From `volcano`:
 ```bash
 go build ./pkg/scheduler/api/devices/mocktopology/...
 go vet ./pkg/scheduler/actions/allocate/...
+
+go: downloading k8s.io/apiserver v0.36.1
+go: downloading github.com/google/go-cmp v0.7.0
+go: downloading k8s.io/component-base v0.36.1
+go: downloading k8s.io/kubernetes v1.36.1
+go: downloading github.com/prometheus/client_golang v1.23.2
+go: downloading k8s.io/kube-scheduler v0.36.1
+go: downloading github.com/mitchellh/mapstructure v1.5.0
+go: downloading k8s.io/component-helpers v0.36.1
+
+go: downloading github.com/beorn7/perks v1.0.1
+go: downloading github.com/cespare/xxhash/v2 v2.3.0
+go: downloading github.com/prometheus/common v0.70.0
+go: downloading github.com/prometheus/client_model v0.6.2
+go: downloading github.com/prometheus/procfs v0.21.0
+go: downloading github.com/blang/semver/v4 v4.0.0
+go: downloading go.opentelemetry.io/otel/trace v1.43.0
+go: downloading k8s.io/dynamic-resource-allocation v0.36.1
+go: downloading stathat.com/c/consistent v1.0.0
+go: downloading k8s.io/controller-manager v0.36.1
+go: downloading k8s.io/apiextensions-apiserver v0.36.1
+go: downloading go.opentelemetry.io/otel v1.43.0
+go: downloading github.com/google/cadvisor v0.56.2
+go: downloading k8s.io/csi-translation-lib v0.36.1
+go: downloading k8s.io/cloud-provider v0.36.1
+go: downloading github.com/spf13/cobra v1.10.2
+go: downloading github.com/elastic/go-elasticsearch/v7 v7.17.10
+go: downloading k8s.io/metrics v0.36.1
+go: downloading github.com/google/cel-go v0.26.0
+go: downloading cel.dev/expr v0.25.1
+go: downloading google.golang.org/genproto/googleapis/api v0.0.0-20260319201613-d00831a3d3e7
+go: downloading github.com/stoewer/go-strcase v1.3.0
+go: downloading golang.org/x/sync v0.22.0
+go: downloading github.com/antlr4-go/antlr/v4 v4.13.0
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20260311181403-84a4fc48630c
+go: downloading golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
+
 go test ./pkg/scheduler/actions/allocate/ -run TestCase2_FragmentedDomainNotVisibleAtSelectionTime -v -count=8
+
+=== RUN   TestCase2_FragmentedDomainNotVisibleAtSelectionTime
+    case2_fragmentation_poc_test.go:170: frag-node: FilterCalled=0 AllocateCalled=0 log=[]
+    case2_fragmentation_poc_test.go:171: healthy-node: FilterCalled=0 AllocateCalled=1 log=[call#1 pod=p1 aggregateFreeAtCallTime=8]
+    case2_fragmentation_poc_test.go:188: Scheduler selected healthy-node this run (non-deterministic tie-break on identical aggregate scores). If AllocateCalled > 1 here, that's a SEPARATE finding worth investigating on its own: Volcano called Allocate() more than once for what should be a single task placement in a single cycle -- check statement.go's rollback path and allocateResourcesForTask's retry behavior around line ~841/958 in allocate.go for why a single-attempt scheduling cycle produced multiple Allocate() calls on one node.
+--- PASS: TestCase2_FragmentedDomainNotVisibleAtSelectionTime (0.11s)
+=== RUN   TestCase2_FragmentedDomainNotVisibleAtSelectionTime
+E0816 19:55:33.061989 1786078 predicates.go:245] AllocateToPod failed POC: node frag-node has 8 aggregate free devices (enough) but no single domain has 8 free (fragmented across 2 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.062925 1786078 statement.go:304] Failed to exec allocate callback functions for task <c1/p1> to node <frag-node> when allocating in Session <1aadddb0-4499-400e-bb10-9a0f9388fecb>: POC: node frag-node has 8 aggregate free devices (enough) but no single domain has 8 free (fragmented across 2 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.063016 1786078 predicates.go:308] predicates, remove pod c1/p1 from node [frag-node] error: no corresponding pod p1 in pods of node frag-node
+E0816 19:55:33.063039 1786078 allocate.go:958] Failed to bind Task c1-p1 on frag-node in Session 1aadddb0-4499-400e-bb10-9a0f9388fecb, err: Task c1/p1 allocate to node frag-node error and errInfos num is 1, allocation has been rolled back
+E0816 19:55:33.063104 1786078 allocate.go:841] "Allocate resources for task fail" err="Task c1/p1 allocate to node frag-node error and errInfos num is 1, allocation has been rolled back" task="p1"
+    case2_fragmentation_poc_test.go:170: frag-node: FilterCalled=0 AllocateCalled=1 log=[call#1 pod=p1 aggregateFreeAtCallTime=8]
+    case2_fragmentation_poc_test.go:171: healthy-node: FilterCalled=0 AllocateCalled=0 log=[]
+    case2_fragmentation_poc_test.go:184: POC CONFIRMED: scheduler selected frag-node (identical aggregate free=8 as healthy-node), device.Allocate() failed post-commit on the fragmented node, and healthy-node was never tried in this cycle -- no cross-node fallback. See AllocateCallLog above for exact call count/order on frag-node.
+--- PASS: TestCase2_FragmentedDomainNotVisibleAtSelectionTime (0.11s)
+=== RUN   TestCase2_FragmentedDomainNotVisibleAtSelectionTime
+E0816 19:55:33.167850 1786078 predicates.go:245] AllocateToPod failed POC: node healthy-node has 0 aggregate free devices (enough) but no single domain has 8 free (fragmented across 1 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.167887 1786078 statement.go:304] Failed to exec allocate callback functions for task <c1/p1> to node <healthy-node> when allocating in Session <682eeee7-73b3-4abf-9609-17448f61c749>: POC: node healthy-node has 0 aggregate free devices (enough) but no single domain has 8 free (fragmented across 1 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.167959 1786078 predicates.go:308] predicates, remove pod c1/p1 from node [healthy-node] error: no corresponding pod p1 in pods of node healthy-node
+E0816 19:55:33.168001 1786078 allocate.go:958] Failed to bind Task c1-p1 on healthy-node in Session 682eeee7-73b3-4abf-9609-17448f61c749, err: Task c1/p1 allocate to node healthy-node error and errInfos num is 1, allocation has been rolled back
+E0816 19:55:33.168073 1786078 allocate.go:841] "Allocate resources for task fail" err="Task c1/p1 allocate to node healthy-node error and errInfos num is 1, allocation has been rolled back" task="p1"
+    case2_fragmentation_poc_test.go:170: frag-node: FilterCalled=0 AllocateCalled=0 log=[]
+    case2_fragmentation_poc_test.go:171: healthy-node: FilterCalled=0 AllocateCalled=2 log=[call#1 pod=p1 aggregateFreeAtCallTime=8 call#2 pod=p1 aggregateFreeAtCallTime=0]
+    case2_fragmentation_poc_test.go:188: Scheduler selected healthy-node this run (non-deterministic tie-break on identical aggregate scores). If AllocateCalled > 1 here, that's a SEPARATE finding worth investigating on its own: Volcano called Allocate() more than once for what should be a single task placement in a single cycle -- check statement.go's rollback path and allocateResourcesForTask's retry behavior around line ~841/958 in allocate.go for why a single-attempt scheduling cycle produced multiple Allocate() calls on one node.
+--- PASS: TestCase2_FragmentedDomainNotVisibleAtSelectionTime (0.10s)
+=== RUN   TestCase2_FragmentedDomainNotVisibleAtSelectionTime
+E0816 19:55:33.272842 1786078 predicates.go:245] AllocateToPod failed POC: node healthy-node has 0 aggregate free devices (enough) but no single domain has 8 free (fragmented across 1 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.272898 1786078 statement.go:304] Failed to exec allocate callback functions for task <c1/p1> to node <healthy-node> when allocating in Session <97403f05-8117-4f8d-9f88-4e36e4b44685>: POC: node healthy-node has 0 aggregate free devices (enough) but no single domain has 8 free (fragmented across 1 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.272965 1786078 predicates.go:308] predicates, remove pod c1/p1 from node [healthy-node] error: no corresponding pod p1 in pods of node healthy-node
+E0816 19:55:33.273003 1786078 allocate.go:958] Failed to bind Task c1-p1 on healthy-node in Session 97403f05-8117-4f8d-9f88-4e36e4b44685, err: Task c1/p1 allocate to node healthy-node error and errInfos num is 1, allocation has been rolled back
+E0816 19:55:33.273060 1786078 allocate.go:841] "Allocate resources for task fail" err="Task c1/p1 allocate to node healthy-node error and errInfos num is 1, allocation has been rolled back" task="p1"
+    case2_fragmentation_poc_test.go:170: frag-node: FilterCalled=0 AllocateCalled=0 log=[]
+    case2_fragmentation_poc_test.go:171: healthy-node: FilterCalled=0 AllocateCalled=2 log=[call#1 pod=p1 aggregateFreeAtCallTime=8 call#2 pod=p1 aggregateFreeAtCallTime=0]
+    case2_fragmentation_poc_test.go:188: Scheduler selected healthy-node this run (non-deterministic tie-break on identical aggregate scores). If AllocateCalled > 1 here, that's a SEPARATE finding worth investigating on its own: Volcano called Allocate() more than once for what should be a single task placement in a single cycle -- check statement.go's rollback path and allocateResourcesForTask's retry behavior around line ~841/958 in allocate.go for why a single-attempt scheduling cycle produced multiple Allocate() calls on one node.
+--- PASS: TestCase2_FragmentedDomainNotVisibleAtSelectionTime (0.10s)
+=== RUN   TestCase2_FragmentedDomainNotVisibleAtSelectionTime
+E0816 19:55:33.380155 1786078 predicates.go:245] AllocateToPod failed POC: node healthy-node has 0 aggregate free devices (enough) but no single domain has 8 free (fragmented across 1 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.380189 1786078 statement.go:304] Failed to exec allocate callback functions for task <c1/p1> to node <healthy-node> when allocating in Session <e777da13-2a18-4248-810d-6aa534ba1ddc>: POC: node healthy-node has 0 aggregate free devices (enough) but no single domain has 8 free (fragmented across 1 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.380224 1786078 predicates.go:308] predicates, remove pod c1/p1 from node [healthy-node] error: no corresponding pod p1 in pods of node healthy-node
+E0816 19:55:33.380238 1786078 allocate.go:958] Failed to bind Task c1-p1 on healthy-node in Session e777da13-2a18-4248-810d-6aa534ba1ddc, err: Task c1/p1 allocate to node healthy-node error and errInfos num is 1, allocation has been rolled back
+E0816 19:55:33.380268 1786078 allocate.go:841] "Allocate resources for task fail" err="Task c1/p1 allocate to node healthy-node error and errInfos num is 1, allocation has been rolled back" task="p1"
+    case2_fragmentation_poc_test.go:170: frag-node: FilterCalled=0 AllocateCalled=0 log=[]
+    case2_fragmentation_poc_test.go:171: healthy-node: FilterCalled=0 AllocateCalled=2 log=[call#1 pod=p1 aggregateFreeAtCallTime=8 call#2 pod=p1 aggregateFreeAtCallTime=0]
+    case2_fragmentation_poc_test.go:188: Scheduler selected healthy-node this run (non-deterministic tie-break on identical aggregate scores). If AllocateCalled > 1 here, that's a SEPARATE finding worth investigating on its own: Volcano called Allocate() more than once for what should be a single task placement in a single cycle -- check statement.go's rollback path and allocateResourcesForTask's retry behavior around line ~841/958 in allocate.go for why a single-attempt scheduling cycle produced multiple Allocate() calls on one node.
+--- PASS: TestCase2_FragmentedDomainNotVisibleAtSelectionTime (0.11s)
+=== RUN   TestCase2_FragmentedDomainNotVisibleAtSelectionTime
+E0816 19:55:33.484884 1786078 predicates.go:245] AllocateToPod failed POC: node frag-node has 8 aggregate free devices (enough) but no single domain has 8 free (fragmented across 2 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.484922 1786078 statement.go:304] Failed to exec allocate callback functions for task <c1/p1> to node <frag-node> when allocating in Session <12874d0c-03e0-4d4e-9c19-7325dacb1f2a>: POC: node frag-node has 8 aggregate free devices (enough) but no single domain has 8 free (fragmented across 2 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.484993 1786078 predicates.go:308] predicates, remove pod c1/p1 from node [frag-node] error: no corresponding pod p1 in pods of node frag-node
+E0816 19:55:33.485017 1786078 allocate.go:958] Failed to bind Task c1-p1 on frag-node in Session 12874d0c-03e0-4d4e-9c19-7325dacb1f2a, err: Task c1/p1 allocate to node frag-node error and errInfos num is 1, allocation has been rolled back
+E0816 19:55:33.485081 1786078 allocate.go:841] "Allocate resources for task fail" err="Task c1/p1 allocate to node frag-node error and errInfos num is 1, allocation has been rolled back" task="p1"
+    case2_fragmentation_poc_test.go:170: frag-node: FilterCalled=0 AllocateCalled=1 log=[call#1 pod=p1 aggregateFreeAtCallTime=8]
+    case2_fragmentation_poc_test.go:171: healthy-node: FilterCalled=0 AllocateCalled=0 log=[]
+    case2_fragmentation_poc_test.go:184: POC CONFIRMED: scheduler selected frag-node (identical aggregate free=8 as healthy-node), device.Allocate() failed post-commit on the fragmented node, and healthy-node was never tried in this cycle -- no cross-node fallback. See AllocateCallLog above for exact call count/order on frag-node.
+--- PASS: TestCase2_FragmentedDomainNotVisibleAtSelectionTime (0.10s)
+=== RUN   TestCase2_FragmentedDomainNotVisibleAtSelectionTime
+E0816 19:55:33.589624 1786078 predicates.go:245] AllocateToPod failed POC: node healthy-node has 0 aggregate free devices (enough) but no single domain has 8 free (fragmented across 1 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.589668 1786078 statement.go:304] Failed to exec allocate callback functions for task <c1/p1> to node <healthy-node> when allocating in Session <8ced22f1-646f-4281-8719-4fabd843d942>: POC: node healthy-node has 0 aggregate free devices (enough) but no single domain has 8 free (fragmented across 1 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.589775 1786078 predicates.go:308] predicates, remove pod c1/p1 from node [healthy-node] error: no corresponding pod p1 in pods of node healthy-node
+E0816 19:55:33.589815 1786078 allocate.go:958] Failed to bind Task c1-p1 on healthy-node in Session 8ced22f1-646f-4281-8719-4fabd843d942, err: Task c1/p1 allocate to node healthy-node error and errInfos num is 1, allocation has been rolled back
+E0816 19:55:33.589899 1786078 allocate.go:841] "Allocate resources for task fail" err="Task c1/p1 allocate to node healthy-node error and errInfos num is 1, allocation has been rolled back" task="p1"
+    case2_fragmentation_poc_test.go:170: frag-node: FilterCalled=0 AllocateCalled=0 log=[]
+    case2_fragmentation_poc_test.go:171: healthy-node: FilterCalled=0 AllocateCalled=2 log=[call#1 pod=p1 aggregateFreeAtCallTime=8 call#2 pod=p1 aggregateFreeAtCallTime=0]
+    case2_fragmentation_poc_test.go:188: Scheduler selected healthy-node this run (non-deterministic tie-break on identical aggregate scores). If AllocateCalled > 1 here, that's a SEPARATE finding worth investigating on its own: Volcano called Allocate() more than once for what should be a single task placement in a single cycle -- check statement.go's rollback path and allocateResourcesForTask's retry behavior around line ~841/958 in allocate.go for why a single-attempt scheduling cycle produced multiple Allocate() calls on one node.
+--- PASS: TestCase2_FragmentedDomainNotVisibleAtSelectionTime (0.10s)
+=== RUN   TestCase2_FragmentedDomainNotVisibleAtSelectionTime
+E0816 19:55:33.694696 1786078 predicates.go:245] AllocateToPod failed POC: node frag-node has 8 aggregate free devices (enough) but no single domain has 8 free (fragmented across 2 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.694736 1786078 statement.go:304] Failed to exec allocate callback functions for task <c1/p1> to node <frag-node> when allocating in Session <b0723ccc-912f-4d92-b1e0-d616b98cf2b9>: POC: node frag-node has 8 aggregate free devices (enough) but no single domain has 8 free (fragmented across 2 domains) -- allocation fails after Node/HyperNode already chosen
+E0816 19:55:33.694856 1786078 predicates.go:308] predicates, remove pod c1/p1 from node [frag-node] error: no corresponding pod p1 in pods of node frag-node
+E0816 19:55:33.694895 1786078 allocate.go:958] Failed to bind Task c1-p1 on frag-node in Session b0723ccc-912f-4d92-b1e0-d616b98cf2b9, err: Task c1/p1 allocate to node frag-node error and errInfos num is 1, allocation has been rolled back
+E0816 19:55:33.695004 1786078 allocate.go:841] "Allocate resources for task fail" err="Task c1/p1 allocate to node frag-node error and errInfos num is 1, allocation has been rolled back" task="p1"
+    case2_fragmentation_poc_test.go:170: frag-node: FilterCalled=0 AllocateCalled=1 log=[call#1 pod=p1 aggregateFreeAtCallTime=8]
+    case2_fragmentation_poc_test.go:171: healthy-node: FilterCalled=0 AllocateCalled=0 log=[]
+    case2_fragmentation_poc_test.go:184: POC CONFIRMED: scheduler selected frag-node (identical aggregate free=8 as healthy-node), device.Allocate() failed post-commit on the fragmented node, and healthy-node was never tried in this cycle -- no cross-node fallback. See AllocateCallLog above for exact call count/order on frag-node.
+--- PASS: TestCase2_FragmentedDomainNotVisibleAtSelectionTime (0.11s)
+PASS
+ok  	volcano.sh/volcano/pkg/scheduler/actions/allocate	0.912s
 ```
 
 ## Scenario
