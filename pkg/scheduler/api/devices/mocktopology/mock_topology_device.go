@@ -52,6 +52,13 @@ type MockTopologyDevices struct {
 	// task in a single cycle, which needed distinguishing from "two different
 	// nodes tried" -- the log makes that visible without guessing.
 	AllocateCallLog []string
+	// AllocateResults records, per pod name, whether the MOST RECENT
+	// Allocate() call for that pod on this node succeeded. Added for the
+	// multi-node/gang PoC, which needs to answer "did pod X actually land
+	// here" precisely rather than inferring it from a free-text log string.
+	// Kept separate from AllocateCallLog (additive, not a replacement) so
+	// existing single-node PoC assertions are unaffected.
+	AllocateResults map[string]bool
 }
 
 func NewMockTopologyDevices(nodeName string, domains ...*Domain) *MockTopologyDevices {
@@ -149,10 +156,14 @@ func (m *MockTopologyDevices) Allocate(kubeClient kubernetes.Interface, pod *v1.
 	m.AllocateCalled++
 	m.AllocateCallLog = append(m.AllocateCallLog, fmt.Sprintf(
 		"call#%d pod=%s aggregateFreeAtCallTime=%d", m.AllocateCalled, pod.Name, m.aggregateFree()))
+	if m.AllocateResults == nil {
+		m.AllocateResults = make(map[string]bool)
+	}
 
 	req := m.requestedCount(pod)
 	d := m.domainThatFits(req)
 	if d == nil {
+		m.AllocateResults[pod.Name] = false
 		// This is the failure the issue describes: aggregate free (8) >= req (8),
 		// but no *domain* has enough. This error surfaces only now, post-commit.
 		// Nothing is mutated on this path -- the check happens before any write.
@@ -162,6 +173,7 @@ func (m *MockTopologyDevices) Allocate(kubeClient kubernetes.Interface, pod *v1.
 			m.NodeName, m.aggregateFree(), req, len(m.Domains))
 	}
 	d.Used += req
+	m.AllocateResults[pod.Name] = true
 	return &devices.DeviceReservation{
 		DeviceType:  "mocktopology",
 		Annotations: map[string]string{DomainAnnotation: d.Name},

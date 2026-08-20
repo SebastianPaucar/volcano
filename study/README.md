@@ -35,6 +35,16 @@ A mock `Devices` backend (satisfying Volcano's real `api.Devices` interface) wir
 
 ---
 
+## 4. `pkg/scheduler/actions/allocate/case2_multinode_poc_test.go` — a gang's tasks can split across a valid and an invalid Node, uncoordinated
+ 
+Extends the same mock device backend from study #3 into a two-HyperNode, multi-node, gang scenario (real `HyperNodesMap`/`HyperNodesSetByTier`/`HyperNodes` fixtures, same pattern as `allocate_test.go`'s own hard-topology tests). One HyperNode has one healthy Node and one fragmented Node; each gang task requests a full-domain device count independently. Run 8 times against the real, compiled `allocate`, `predicates`, `gang`, and `network-topology-aware` plugins.
+ 
+**What it shows:** in the run where the gang split across the HyperNode's two Nodes, one sibling task landed on the healthy Node and the other on the fragmented one — with nothing in HyperNode selection, Node selection, or gang orchestration checking that *every* Node a gang's tasks land on actually has a valid local device group. This directly targets #5751 Case 2's own language ("each Pod must receive a valid local device group... coordinate device choices across a PodGroup"). In most runs the two tasks instead converged onto the *same* Node — a related, secondary pattern worth naming on its own: domain-blind binpack scoring concentrates gang tasks together, which changes the shape of the failure (the gang fails as a whole, more visibly) without fixing the blind spot that causes it.
+ 
+[→ pkg/scheduler/api/devices/mocktopology/README-case2-multinode.md](../pkg/scheduler/api/devices/mocktopology/multi-node-tests/README.md)
+
+---
+
 ## How these PoCs fit together
 
 Read in combination, not isolation:
@@ -42,5 +52,7 @@ Read in combination, not isolation:
 * Study #1 shows a specific vendor has no domain concept to enforce
 * Study #2 makes the resulting aggregate/domain disagreement concrete against real decoding logic
 * Study #3 shows that even where a domain-check hook exists in the generic scheduler, it isn't wired into the path that actually decides Node placement.
+* Study #4 extends #3 to gangs across multiple Nodes and HyperNodes, showing the same blind spot lets a gang's tasks split across good and bad hardware with no coordination — the exact multi-Node coordination gap #5751's Case 2 describes
+
 
 These are Different layers of the same gap — the data model, one vendor's implementation, and the scheduler's own orchestration timing — none of which alone would motivate #5751's proposed generic, vendor-neutral topology model as clearly as seeing all three together.
