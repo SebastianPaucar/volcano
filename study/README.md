@@ -45,6 +45,22 @@ Extends the same mock device backend from study #3 into a two-HyperNode, multi-n
 
 ---
 
+## 5. `pkg/scheduler/plugins/xpu-domain-aware/xpu_domain_aware_test.go`
+
+The insight is this: the scheduler already has a hook capable of carrying domain data before HyperNode/Node selection — `AddHyperNodeGradientForSubJobFn` — but nothing populates it with device-domain awareness today, and the hook's contract (search-root expansion, not per-candidate) isn't documented anywhere obvious. That's the gap. The fix isn't new scheduler machinery; it's a plugin that expands `ssn.HyperNodes` itself, filters on a vendor-neutral `TopologyProvider`, and fails closed when data is missing.
+
+**What it shows:** Concretely, per tests it shows
+* **Test 1** — the mechanism discriminates HyperNodes that look identical under aggregate accounting 
+* **Test 2** — it fails closed instead of committing and discovering the domain mismatch late (allocation fails after Node/HyperNode are already committed).
+* **Test 3** — the fix composes correctly with existing scoring/selection machinery when multiple HyperNodes pass; it's not a special-cased single-candidate hack.
+* **Test 4** — when a vendor plugin has nowhere to report domain data (your mindcluster/vgpu finding), the mechanism doesn't silently claim safety it can't back up. Missing data does not mean permission.
+
+> A naive implementation could easily treat "no domain info" as "no constraint" and let it through, which would be worse than today's aggregate-only behavior — it would look domain-aware while actually being blind on exactly the vendors that need it most.
+
+[→ pkg/scheduler/plugins/xpu-domain-aware/README.md](../pkg/scheduler/plugins/xpu-domain-aware/README.md)
+
+---
+
 ## How these PoCs fit together
 
 Read in combination, not isolation:
@@ -53,6 +69,6 @@ Read in combination, not isolation:
 * Study #2 makes the resulting aggregate/domain disagreement concrete against real decoding logic
 * Study #3 shows that even where a domain-check hook exists in the generic scheduler, it isn't wired into the path that actually decides Node placement.
 * Study #4 extends #3 to gangs across multiple Nodes and HyperNodes, showing the same blind spot lets a gang's tasks split across good and bad hardware with no coordination — the exact multi-Node coordination gap #5751's Case 2 describes
-
+* Study #5 extends #3/#4's hook-wiring finding into a working filter: `AddHyperNodeGradientForSubJobFn` can carry real domain data before HyperNode/Node selection, but only if the plugin expands the search root itself and treats missing per-device domain data — the exact vendor gap Study #1 found in mindcluster/vgpu — as unsatisfying rather than as absence of constraint. Validated against real `allocate`/`predicates`/`gang` code across single-domain, no-domain, multi-candidate, and missing-data cases.
 
 These are Different layers of the same gap — the data model, one vendor's implementation, and the scheduler's own orchestration timing — none of which alone would motivate #5751's proposed generic, vendor-neutral topology model as clearly as seeing all three together.
