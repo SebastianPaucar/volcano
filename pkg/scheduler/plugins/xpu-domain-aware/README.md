@@ -27,6 +27,8 @@ A `MockTopologyProvider` backs it for this PoC, consistent with the project's ow
 | `topology.go` | `TopologyDomain`, `TopologyProvider` interface, `MockTopologyProvider` |
 | `xpu_domain_aware.go` | The gradient-filtering plugin (`PluginName = "xpu-domain-aware"`) |
 | `xpu_domain_aware_test.go` | Two tests against real `allocate`/`predicates`/`gang` plugins |
+| `gang.go` | `PlanGangDeviceIDs`: concrete device ID selection within a winning domain, for a gang's multiple tasks |
+| `gang_test.go` | Tests for disjoint assignment, capacity failure, determinism, input validation |
 
 ## Tests
 
@@ -42,6 +44,14 @@ Three HyperNodes: one fails the domain filter (split 4/4), two pass (each has on
 **`TestXPUDomainAware_MissingDomainDataTreatedAsUnsatisfying`**
 Reproduces the mindcluster/vgpu gap from the issue thread: one Node has no entry in the `TopologyProvider` at all (not an empty domain list — no domain concept whatsoever, matching vendor plugins with nowhere to report per-device domain membership). Confirms missing domain data is treated as unsatisfying, never silently let through as "no constraint."
 
+**`gang_test.go`** (`PlanGangDeviceIDs`)
+Extends the PoC past single-task HyperNode filtering into gang-level concrete device ID selection within the already-chosen winning domain. Deliberately narrow: no reservation/rollback wiring, no repeated HyperNode/domain selection. Answers Case 2 directly: aggregate free-device counts alone don't prove a gang can be placed without device collisions between its tasks.
+
+- `TestPlanGangDeviceIDs_DisjointAssignment`: two tasks in one domain get non-overlapping device IDs.
+- `TestPlanGangDeviceIDs_InsufficientAggregateCapacityFails`: fails cleanly with no partial assignment when the domain can't fit every task.
+- `TestPlanGangDeviceIDs_DeterministicAcrossCalls`: same input always produces the same assignment.
+- `TestPlanGangDeviceIDs_RejectsInvalidRequests`: duplicate TaskIDs, empty TaskIDs, and non-positive device counts are rejected as caller errors.
+
 ## Run it
 
 ```bash
@@ -49,16 +59,34 @@ go build ./pkg/scheduler/plugins/xpu-domain-aware/...
 go vet ./pkg/scheduler/plugins/xpu-domain-aware/...
 go test ./pkg/scheduler/plugins/xpu-domain-aware/... -v -run TestXPUDomainAware
 
+=== RUN   TestPlanGangDeviceIDs_DisjointAssignment
+--- PASS: TestPlanGangDeviceIDs_DisjointAssignment (0.00s)
+=== RUN   TestPlanGangDeviceIDs_InsufficientAggregateCapacityFails
+--- PASS: TestPlanGangDeviceIDs_InsufficientAggregateCapacityFails (0.00s)
+=== RUN   TestPlanGangDeviceIDs_DeterministicAcrossCalls
+--- PASS: TestPlanGangDeviceIDs_DeterministicAcrossCalls (0.00s)
+=== RUN   TestPlanGangDeviceIDs_RejectsInvalidRequests
+=== RUN   TestPlanGangDeviceIDs_RejectsInvalidRequests/duplicate_TaskID
+=== RUN   TestPlanGangDeviceIDs_RejectsInvalidRequests/empty_TaskID
+=== RUN   TestPlanGangDeviceIDs_RejectsInvalidRequests/zero_DevicesPerTask
+=== RUN   TestPlanGangDeviceIDs_RejectsInvalidRequests/negative_DevicesPerTask
+=== RUN   TestPlanGangDeviceIDs_RejectsInvalidRequests/no_requests
+--- PASS: TestPlanGangDeviceIDs_RejectsInvalidRequests (0.00s)
+    --- PASS: TestPlanGangDeviceIDs_RejectsInvalidRequests/duplicate_TaskID (0.00s)
+    --- PASS: TestPlanGangDeviceIDs_RejectsInvalidRequests/empty_TaskID (0.00s)
+    --- PASS: TestPlanGangDeviceIDs_RejectsInvalidRequests/zero_DevicesPerTask (0.00s)
+    --- PASS: TestPlanGangDeviceIDs_RejectsInvalidRequests/negative_DevicesPerTask (0.00s)
+    --- PASS: TestPlanGangDeviceIDs_RejectsInvalidRequests/no_requests (0.00s)
 === RUN   TestXPUDomainAware_FiltersHyperNodeWithSplitDomains
 --- PASS: TestXPUDomainAware_FiltersHyperNodeWithSplitDomains (0.37s)
 === RUN   TestXPUDomainAware_NoSatisfyingDomainAnywhereBlocksAllocation
---- PASS: TestXPUDomainAware_NoSatisfyingDomainAnywhereBlocksAllocation (0.35s)
+--- PASS: TestXPUDomainAware_NoSatisfyingDomainAnywhereBlocksAllocation (0.37s)
 === RUN   TestXPUDomainAware_MultipleSatisfyingHyperNodesBindsToOne
 --- PASS: TestXPUDomainAware_MultipleSatisfyingHyperNodesBindsToOne (0.38s)
 === RUN   TestXPUDomainAware_MissingDomainDataTreatedAsUnsatisfying
---- PASS: TestXPUDomainAware_MissingDomainDataTreatedAsUnsatisfying (0.35s)
+--- PASS: TestXPUDomainAware_MissingDomainDataTreatedAsUnsatisfying (0.39s)
 PASS
-ok  	volcano.sh/volcano/pkg/scheduler/plugins/xpu-domain-aware	1.513s
+ok  	volcano.sh/volcano/pkg/scheduler/plugins/xpu-domain-aware	1.564s
 ```
 
 ## What this proves
@@ -79,5 +107,6 @@ This PoC proves the mechanism, not the full project. Left out:
 - Reservation and gang-level rollback
 - Cross-node fabric domains (Case 3, e.g. GB200 NVL72)
 - Real Device Plugin / DRA `ResourceSlice` ingestion (mock provider only)
+- Wiring `PlanGangDeviceIDs` into the real `allocate`/`gang` action code path. It's validated standalone against the same `TopologyDomain` type the gradient plugin uses, but not yet called from `OnSessionOpen`
 
 These are the actual project scope (Expected Outcomes 1–3 in the issue), not something a PoC of this size should attempt.
